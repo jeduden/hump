@@ -1,4 +1,4 @@
---[[
+--[[__tostring
 Copyright (c) 2010-2013 Matthias Richter
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -24,7 +24,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ]]--
 
-local function __NULL__() end
+local function __NULL__(...) end
 
  -- default gamestate produces error on every callback
 local state_init = setmetatable({leave = __NULL__},
@@ -85,15 +85,31 @@ for k in pairs(love.handlers) do
 	all_callbacks[#all_callbacks+1] = k
 end
 
+local unpack = unpack or table.unpack
+
 function GS.registerEvents(callbacks)
 	local registry = {}
 	callbacks = callbacks or all_callbacks
 	for _, f in ipairs(callbacks) do
 		registry[f] = love[f] or __NULL__
+        
+        local errh = function(err)
+            if GS.errorState and GS.current() ~= GS.errorState then
+                GS.switch(GS.errorState, err, debug.traceback())
+            end
+        end
 		love[f] = function(...)
-			registry[f](...)
-			return GS[f](...)
-		end
+            local args = {...}
+            local c = function()
+                registry[f](unpack(args))
+                return GS[f](unpack(args))
+            end
+            local retvalues = {xpcall(c, errh)}
+            local success = table.remove(retvalues)
+            if success and retvalues then
+              return unpack(retvalues)
+            end
+        end
 	end
 end
 
